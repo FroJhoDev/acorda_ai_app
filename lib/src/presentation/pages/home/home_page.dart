@@ -26,32 +26,35 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _viewModel = sl<HomeViewModel>();
+
+    // Configura o callback para quando um alarme dispara
+    _viewModel.onAlarmTriggered = (alarm) {
+      debugPrint('🚨 UI RECEBEU ALARME: ${alarm.title}');
+      _navigateToActiveAlarm(alarm);
+    };
+
+    // Configura os callbacks internos do ViewModel
+    _viewModel.setupCallbacks();
+
     _initializeViewModel();
   }
 
   Future<void> _initializeViewModel() async {
-    // Configura o callback para quando um alarme dispara
-    _viewModel.onAlarmTriggered = (alarm) {
-      _navigateToActiveAlarm(alarm);
-    };
-
     await _viewModel.initialize();
   }
 
   /// Navega para a página de alarme ativo
-  void _navigateToActiveAlarm(alarm) {
-    Navigator.of(context).push(
+  void _navigateToActiveAlarm(alarm) async {
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => AlarmActivePage(
           alarm: alarm,
-          onStopAlarm: () {
-            // Recarrega os alarmes quando o alarme é parado
-            _viewModel.refresh();
-          },
         ),
         settings: const RouteSettings(name: '/alarm-active'),
       ),
     );
+    // Recarrega os alarmes quando volta da tela
+    _viewModel.refresh();
   }
 
   @override

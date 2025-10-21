@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_strings.dart';
-import 'presentation/pages/home/home_page.dart';
+import 'presentation/pages/map_home/map_home_page.dart';
 
 /// Widget principal do aplicativo AcordaAI
 class AcordaAIApp extends StatelessWidget {
@@ -11,10 +11,10 @@ class AcordaAIApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: AppStrings.appName,
-      theme: AppTheme.lightTheme,
+      theme: AppTheme.darkTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
-      home: const HomePage(),
+      themeMode: ThemeMode.dark,
+      home: const MapHomePage(),
       debugShowCheckedModeBanner: false,
     );
   }

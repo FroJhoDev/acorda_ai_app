@@ -24,49 +24,72 @@ class MonitorAlarmsUseCase {
 
   /// Inicia o monitoramento de alarmes
   Future<Either<Failure, void>> startMonitoring() async {
+    debugPrint('🔍 Iniciando monitoramento de alarmes...');
+
     // Primeiro verifica as permissões
     final hasLocationPermission =
         await _locationRepository.hasLocationPermission();
     if (hasLocationPermission.isLeft()) {
+      debugPrint('❌ Erro ao verificar permissão de localização');
       return Left(hasLocationPermission.fold((l) => l,
           (r) => const PermissionFailure(message: 'Unknown permission error')));
     }
 
     if (!hasLocationPermission.getOrElse(() => false)) {
+      debugPrint('🔒 Solicitando permissão de localização...');
       final requestResult =
           await _locationRepository.requestLocationPermission();
       if (requestResult.isLeft() || !requestResult.getOrElse(() => false)) {
+        debugPrint('❌ Permissão de localização negada');
         return const Left(
             PermissionFailure(message: 'Location permission denied'));
       }
+      debugPrint('✅ Permissão de localização concedida');
+    } else {
+      debugPrint('✅ Permissão de localização já concedida');
     }
 
     // Inicia o monitoramento de localização
+    debugPrint('📡 Iniciando stream de localização...');
     final startResult = await _locationRepository.startLocationMonitoring();
     if (startResult.isLeft()) {
+      debugPrint('❌ Erro ao iniciar monitoramento de localização');
       return startResult;
     }
 
     // Monitora as atualizações de localização
     _locationRepository.locationStream.listen((locationResult) {
       locationResult.fold(
-        (failure) => debugPrint('Location error: ${failure.message}'),
-        (location) => _checkAlarmsForLocation(location),
+        (failure) => debugPrint('❌ Erro de localização: ${failure.message}'),
+        (location) {
+          debugPrint(
+              '📍 Nova localização recebida: (${location.latitude}, ${location.longitude})');
+          _checkAlarmsForLocation(location);
+        },
       );
     });
 
+    debugPrint('✅ Monitoramento iniciado com sucesso');
     return const Right(null);
   }
 
   /// Verifica se algum alarme deve ser disparado para a localização atual
   Future<void> _checkAlarmsForLocation(Location currentLocation) async {
+    debugPrint(
+        '📍 Verificando alarmes para localização: (${currentLocation.latitude}, ${currentLocation.longitude})');
+
     final alarmsResult = await _alarmRepository.getActiveAlarms();
 
     alarmsResult.fold(
-      (failure) => debugPrint('Error getting alarms: ${failure.message}'),
+      (failure) => debugPrint('❌ Erro ao obter alarmes: ${failure.message}'),
       (alarms) {
+        debugPrint('📋 Alarmes ativos encontrados: ${alarms.length}');
+
         for (final alarm in alarms) {
-          if (!alarm.isTriggered) {
+          debugPrint(
+              '  - Alarme: ${alarm.title} (Ativo: ${alarm.isActive}, Disparado: ${alarm.isTriggered})');
+
+          if (alarm.isActive && !alarm.isTriggered) {
             final alarmLocation = Location(
               latitude: alarm.latitude,
               longitude: alarm.longitude,
@@ -74,8 +97,11 @@ class MonitorAlarmsUseCase {
             );
 
             final distance = currentLocation.distanceTo(alarmLocation);
+            debugPrint(
+                '    Distância: ${distance.toStringAsFixed(2)}m / Raio: ${alarm.radius}m');
 
             if (distance <= alarm.radius) {
+              debugPrint('🚨 DISPARANDO ALARME: ${alarm.title}');
               _triggerAlarm(alarm);
             }
           }

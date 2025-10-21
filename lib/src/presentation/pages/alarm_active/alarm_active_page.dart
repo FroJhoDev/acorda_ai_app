@@ -2,17 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../domain/entities/location_alarm.dart';
 import '../../../core/services/alarm_sound_service.dart';
+import '../../../core/injections/dependency_injection_simple.dart';
+import '../../../core/theme/app_colors.dart';
 
-/// Página exibida quando um alarme dispara
 class AlarmActivePage extends StatefulWidget {
   final LocationAlarm alarm;
-  final VoidCallback onStopAlarm;
 
   const AlarmActivePage({
-    Key? key,
+    super.key,
     required this.alarm,
-    required this.onStopAlarm,
-  }) : super(key: key);
+  });
 
   @override
   State<AlarmActivePage> createState() => _AlarmActivePageState();
@@ -20,62 +19,73 @@ class AlarmActivePage extends StatefulWidget {
 
 class _AlarmActivePageState extends State<AlarmActivePage>
     with TickerProviderStateMixin {
+  late final AlarmSoundService _alarmSoundService;
   late AnimationController _pulseController;
-  late AnimationController _rotationController;
   late Animation<double> _pulseAnimation;
+  late AnimationController _rotationController;
   late Animation<double> _rotationAnimation;
 
-  final AlarmSoundService _alarmSoundService = AlarmSoundService();
   bool _alarmStopped = false;
 
   @override
   void initState() {
     super.initState();
-    _setupAnimations();
-    _startAlarm();
-  }
 
-  void _setupAnimations() {
-    // Animação de pulsação
+    _alarmSoundService = sl<AlarmSoundService>();
+
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     );
     _pulseAnimation = Tween<double>(
-      begin: 0.8,
-      end: 1.2,
-    ).animate(CurvedAnimation(
-      parent: _pulseController,
-      curve: Curves.easeInOut,
-    ));
+      begin: 0.95,
+      end: 1.05,
+    ).animate(
+      CurvedAnimation(
+        parent: _pulseController,
+        curve: Curves.easeInOut,
+      ),
+    );
+    _pulseController.repeat(reverse: true);
 
-    // Animação de rotação
     _rotationController = AnimationController(
-      duration: const Duration(seconds: 2),
+      duration: const Duration(milliseconds: 500),
       vsync: this,
     );
     _rotationAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(_rotationController);
+      begin: -0.05,
+      end: 0.05,
+    ).animate(
+      CurvedAnimation(
+        parent: _rotationController,
+        curve: Curves.easeInOut,
+      ),
+    );
+    _rotationController.repeat(reverse: true);
 
-    // Iniciar animações em loop
-    _pulseController.repeat(reverse: true);
-    _rotationController.repeat();
+    _playAlarm();
+    _startVibration();
   }
 
-  Future<void> _startAlarm() async {
+  void _startVibration() {
+    if (widget.alarm.vibrationEnabled) {
+      HapticFeedback.heavyImpact();
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted && !_alarmStopped) {
+          _startVibration();
+        }
+      });
+    }
+  }
+
+  Future<void> _playAlarm() async {
     try {
       await _alarmSoundService.startAlarm(
         enableSound: widget.alarm.soundPath.isNotEmpty,
         enableVibration: widget.alarm.vibrationEnabled,
       );
-
-      // Vibração háptica adicional
-      HapticFeedback.vibrate();
     } catch (e) {
-      // Continue mesmo se houver erro no som/vibração
-      debugPrint('Erro ao iniciar alarme: $e');
+      debugPrint('Erro ao tocar alarme: $e');
     }
   }
 
@@ -88,18 +98,11 @@ class _AlarmActivePageState extends State<AlarmActivePage>
 
     try {
       await _alarmSoundService.stopAlarm();
-      HapticFeedback.lightImpact();
-
-      // Chamar callback para notificar que o alarme foi parado
-      widget.onStopAlarm();
-
-      // Voltar para a tela anterior
       if (mounted) {
         Navigator.of(context).pop();
       }
     } catch (e) {
       debugPrint('Erro ao parar alarme: $e');
-      // Mesmo com erro, voltar para a tela anterior
       if (mounted) {
         Navigator.of(context).pop();
       }
@@ -119,58 +122,71 @@ class _AlarmActivePageState extends State<AlarmActivePage>
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-      onWillPop: () async {
-        // Impedir que o usuário saia sem parar o alarme
-        return false;
-      },
+      onWillPop: () async => false,
       child: Scaffold(
-        backgroundColor: Colors.red[900],
-        body: SafeArea(
-          child: Container(
-            width: double.infinity,
-            height: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.red[900]!,
-                  Colors.red[700]!,
-                  Colors.orange[600]!,
-                ],
-              ),
+        backgroundColor: AppColors.background,
+        body: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                const Color(0xFF1E1E1E),
+                const Color(0xFF0A0A0A),
+                AppColors.error.withOpacity(0.3),
+              ],
             ),
+          ),
+          child: SafeArea(
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Spacer(),
-
-                // Ícone de alarme animado
+                const SizedBox(height: 60),
                 AnimatedBuilder(
                   animation: _rotationAnimation,
                   builder: (context, child) {
                     return Transform.rotate(
-                      angle: _rotationAnimation.value * 2.0 * 3.141592653589793,
+                      angle: _rotationAnimation.value * 0.2,
                       child: AnimatedBuilder(
                         animation: _pulseAnimation,
                         builder: (context, child) {
                           return Transform.scale(
                             scale: _pulseAnimation.value,
                             child: Container(
-                              width: 150,
-                              height: 150,
+                              width: 180,
+                              height: 180,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Colors.white.withOpacity(0.2),
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 3,
+                                gradient: RadialGradient(
+                                  colors: [
+                                    AppColors.error.withOpacity(0.4),
+                                    AppColors.error.withOpacity(0.1),
+                                    Colors.transparent,
+                                  ],
                                 ),
                               ),
-                              child: const Icon(
-                                Icons.alarm,
-                                size: 80,
-                                color: Colors.white,
+                              child: Center(
+                                child: Container(
+                                  width: 140,
+                                  height: 140,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: AppColors.error,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppColors.error.withOpacity(0.5),
+                                        blurRadius: 30,
+                                        spreadRadius: 10,
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.alarm,
+                                    size: 80,
+                                    color: Colors.white,
+                                  ),
+                                ),
                               ),
                             ),
                           );
@@ -179,187 +195,196 @@ class _AlarmActivePageState extends State<AlarmActivePage>
                     );
                   },
                 ),
-
-                const SizedBox(height: 40),
-
-                // Título do alarme
-                const Text(
-                  '🚨 ALARME ATIVO! 🚨',
+                const SizedBox(height: 60),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    widget.alarm.title,
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      height: 1.2,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Você chegou ao destino!',
                   style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    shadows: [
-                      Shadow(
-                        color: Colors.black45,
-                        offset: Offset(2, 2),
-                        blurRadius: 4,
-                      ),
-                    ],
+                    fontSize: 18,
+                    color: Colors.white.withOpacity(0.7),
+                    fontWeight: FontWeight.w500,
                   ),
                   textAlign: TextAlign.center,
                 ),
-
-                const SizedBox(height: 20),
-
-                // Informações do alarme
+                const SizedBox(height: 40),
                 Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 30),
-                  padding: const EdgeInsets.all(20),
+                  margin: const EdgeInsets.symmetric(horizontal: 32),
+                  padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(15),
+                    color: AppColors.surface.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.3),
-                      width: 1,
+                      color: AppColors.border.withOpacity(0.5),
                     ),
                   ),
                   child: Column(
                     children: [
-                      Text(
-                        'Você chegou ao destino:',
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.white.withOpacity(0.9),
+                      if (widget.alarm.description.isNotEmpty) ...[
+                        Text(
+                          widget.alarm.description,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.white.withOpacity(0.8),
+                            height: 1.4,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        widget.alarm.title,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 15),
+                        const SizedBox(height: 20),
+                      ],
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          if (widget.alarm.soundPath.isNotEmpty)
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.volume_up,
-                                  color: Colors.white.withOpacity(0.8),
-                                  size: 20,
+                          if (widget.alarm.soundPath.isNotEmpty) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.accent.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: AppColors.accent.withOpacity(0.5),
                                 ),
-                                const SizedBox(width: 5),
-                                Text(
-                                  'Som',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.8),
-                                    fontSize: 14,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.volume_up,
+                                    color: AppColors.accent,
+                                    size: 18,
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Som',
+                                    style: TextStyle(
+                                      color: AppColors.accent,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
+                            const SizedBox(width: 12),
+                          ],
                           if (widget.alarm.vibrationEnabled)
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.vibration,
-                                  color: Colors.white.withOpacity(0.8),
-                                  size: 20,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.accent.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: AppColors.accent.withOpacity(0.5),
                                 ),
-                                const SizedBox(width: 5),
-                                Text(
-                                  'Vibração',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.8),
-                                    fontSize: 14,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.vibration,
+                                    color: AppColors.accent,
+                                    size: 18,
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Vibração',
+                                    style: TextStyle(
+                                      color: AppColors.accent,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                         ],
                       ),
                     ],
                   ),
                 ),
-
                 const Spacer(),
-
-                // Botão para parar o alarme
                 Padding(
-                  padding: const EdgeInsets.all(30),
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
                   child: AnimatedBuilder(
                     animation: _pulseAnimation,
                     builder: (context, child) {
                       return Transform.scale(
-                        scale: 0.8 + (_pulseAnimation.value - 0.8) * 0.5,
-                        child: Container(
+                        scale: 0.98 + (_pulseAnimation.value - 0.95) * 0.2,
+                        child: SizedBox(
                           width: double.infinity,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Colors.green, Colors.lightGreen],
-                            ),
-                            borderRadius: BorderRadius.circular(40),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
-                                offset: const Offset(0, 4),
-                                blurRadius: 8,
+                          height: 70,
+                          child: ElevatedButton(
+                            onPressed: _alarmStopped ? null : _stopAlarm,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.active,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor:
+                                  AppColors.active.withOpacity(0.5),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(35),
                               ),
-                            ],
-                          ),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(40),
-                              onTap: _alarmStopped ? null : _stopAlarm,
-                              child: Center(
-                                child: _alarmStopped
-                                    ? const CircularProgressIndicator(
-                                        color: Colors.white,
-                                      )
-                                    : const Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            Icons.stop,
-                                            color: Colors.white,
-                                            size: 30,
-                                          ),
-                                          SizedBox(width: 10),
-                                          Text(
-                                            'PARAR ALARME',
-                                            style: TextStyle(
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ],
+                              elevation: 8,
+                              shadowColor: AppColors.active.withOpacity(0.5),
+                            ),
+                            child: _alarmStopped
+                                ? const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          Colors.white),
+                                    ),
+                                  )
+                                : const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.stop_circle, size: 32),
+                                      SizedBox(width: 12),
+                                      Text(
+                                        'PARAR ALARME',
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
                                       ),
-                              ),
-                            ),
+                                    ],
+                                  ),
                           ),
                         ),
                       );
                     },
                   ),
                 ),
-
-                // Instruções adicionais
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 30),
-                  child: Text(
-                    'Toque no botão acima para parar o alarme',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.white.withOpacity(0.7),
-                      fontStyle: FontStyle.italic,
-                    ),
-                    textAlign: TextAlign.center,
+                const SizedBox(height: 20),
+                Text(
+                  'Toque para silenciar o alarme',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.white.withOpacity(0.5),
+                    fontStyle: FontStyle.italic,
                   ),
                 ),
-
-                const SizedBox(height: 20),
+                const SizedBox(height: 40),
               ],
             ),
           ),

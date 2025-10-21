@@ -20,10 +20,19 @@ class HomeViewModel extends ChangeNotifier {
     required MonitorAlarmsUseCase monitorAlarmsUseCase,
   })  : _getAlarmsUseCase = getAlarmsUseCase,
         _getCurrentLocationUseCase = getCurrentLocationUseCase,
-        _monitorAlarmsUseCase = monitorAlarmsUseCase {
-    // Configura o callback no caso de uso de monitoramento
+        _monitorAlarmsUseCase = monitorAlarmsUseCase;
+
+  /// Configura os callbacks (deve ser chamado antes de initialize)
+  void setupCallbacks() {
+    debugPrint('🔗 Configurando callback de alarme disparado no UseCase');
     _monitorAlarmsUseCase.onAlarmTriggered = (alarm) {
-      onAlarmTriggered?.call(alarm);
+      debugPrint('📢 UseCase → ViewModel: Alarme disparado: ${alarm.title}');
+      if (onAlarmTriggered != null) {
+        debugPrint('📢 ViewModel → UI: Chamando callback da UI');
+        onAlarmTriggered?.call(alarm);
+      } else {
+        debugPrint('⚠️ Callback onAlarmTriggered é null na UI!');
+      }
     };
   }
 
